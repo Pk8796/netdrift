@@ -1,0 +1,18 @@
+hostname {{ name }}
+!
+interface lo
+ ip address {{ loopback }}/32
+!
+{% for i in interfaces %}
+interface {{ i.name }}
+ description {{ i.desc }}
+ ip address {{ i.ip }}
+!
+{% endfor %}
+router ospf
+{% for net in ospf_networks %}
+ network {{ net }} area 0
+{% endfor %}
+!
+line vty
+!

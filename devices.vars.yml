@@ -1,0 +1,18 @@
+# Data model for `netdrift render` -> generates intended/*.cfg from templates/frr.cfg.j2
+devices:
+  r1:
+    loopback: 10.0.0.1
+    interfaces:
+      - {name: eth1, desc: link-to-r2, ip: 10.12.0.1/24}
+      - {name: eth2, desc: link-to-r3, ip: 10.13.0.1/24}
+    ospf_networks: [10.0.0.1/32, 10.12.0.0/24, 10.13.0.0/24]
+  r2:
+    loopback: 10.0.0.2
+    interfaces:
+      - {name: eth1, desc: link-to-r1, ip: 10.12.0.2/24}
+    ospf_networks: [10.0.0.2/32, 10.12.0.0/24]
+  r3:
+    loopback: 10.0.0.3
+    interfaces:
+      - {name: eth1, desc: link-to-r1, ip: 10.13.0.3/24}
+    ospf_networks: [10.0.0.3/32, 10.13.0.0/24]

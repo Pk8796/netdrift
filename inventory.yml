@@ -1,0 +1,18 @@
+# Devices the reconciler manages. Credentials here are lab-only.
+defaults:
+  username: admin
+  password: admin
+  platform: cisco_ios      # FRR's vtysh speaks IOS-ish, so netmiko cisco_ios works
+  port: 22
+
+devices:
+  - name: r1
+    host: 127.0.0.1
+    port: 2211
+  - name: r2
+    host: 127.0.0.1
+    port: 2212
+  - name: r3
+    host: 127.0.0.1
+    port: 2213
+    protected: true        # drift on protected devices is what we alert loudest on

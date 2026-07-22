@@ -1,0 +1,83 @@
+{
+  "title": "NetDrift — Config Drift",
+  "uid": "netdrift",
+  "schemaVersion": 39,
+  "editable": true,
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "10s",
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Drift events (rate)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "custom": { "fillOpacity": 20 } } },
+      "targets": [
+        {
+          "expr": "sum by (device) (rate(netdrift_drift_events_total[5m]))",
+          "legendFormat": "{{device}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "barchart",
+      "title": "Drift events per device",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum by (device) (netdrift_drift_events_total)",
+          "legendFormat": "{{device}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Device reachability",
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "DOWN" }, "1": { "text": "UP" } } }
+          ],
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        { "expr": "netdrift_device_up", "legendFormat": "{{device}}" }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Seconds since last reconcile",
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 8 },
+      "targets": [
+        {
+          "expr": "time() - netdrift_last_reconcile_timestamp",
+          "legendFormat": "{{device}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Reconcile duration",
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        {
+          "expr": "netdrift_reconcile_duration_seconds",
+          "legendFormat": "{{device}}"
+        }
+      ]
+    }
+  ]
+}
