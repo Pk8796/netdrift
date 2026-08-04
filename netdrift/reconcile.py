@@ -30,11 +30,11 @@ def check_device(device, intended_dir):
 
 
 def heal_device(device, intended_dir):
-    """Detect and, if drifted, correct (Rung 2).
+    """Detect drift and fix it (Rung 2).
 
-    Backs up the live config before touching anything, then verifies the push
-    actually converged. If the push fails or doesn't converge, revert to the
-    backup so we never leave a half-applied config behind.
+    Back up what's on the box before touching it, push the intended config, then
+    re-read to make sure it actually converged. If the push fails or the device
+    still doesn't match, put the backup back so we never leave it half-applied.
     """
     intended = _intended_for(device, intended_dir)
     with DeviceSession(device) as sess:

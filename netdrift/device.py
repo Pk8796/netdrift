@@ -10,11 +10,10 @@ class Unreachable(Exception):
 
 
 class DeviceSession:
-    """Context manager around a single netmiko connection.
+    """Thin context manager around one netmiko connection.
 
-    Kept intentionally thin — Rung 2 could swap this for NAPALM to get
-    load_replace_candidate/commit/rollback for free, but Netmiko keeps the
-    lab dead simple and vendor-neutral enough for FRR.
+    Kept simple on purpose. If you want proper replace-and-commit with rollback,
+    NAPALM is the drop-in here — this class is the seam.
     """
 
     def __init__(self, device):

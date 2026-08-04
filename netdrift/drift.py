@@ -1,7 +1,7 @@
 import difflib
 
-# Lines devices emit that mean nothing for comparison. Without stripping these,
-# every read looks like drift because of a timestamp or a byte count.
+# Stuff devices print that isn't real config — timestamps, byte counts, banners.
+# If we don't drop these, every single read shows up as "drift".
 _VOLATILE = (
     "Building configuration",
     "Current configuration",

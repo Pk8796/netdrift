@@ -1,32 +1,35 @@
-# NetDrift — GitOps for the Network
+# NetDrift
+
+A small tool I built to catch and fix **config drift** on network devices — the
+same "keep reality matching Git" idea GitOps uses for Kubernetes, pointed at
+routers instead. Built the week after my CCNA to turn the cert into something
+that actually runs.
 
 Repo: https://github.com/Pk8796/netdrift
 
-> It's Argo CD, but for routers: declare the network you want in Git, and a loop keeps the real devices matching it, healing config drift on its own.
+## The problem it solves
 
-A small Python control loop that keeps network devices matching an **intended configuration declared in Git**. It reads each device's live config, detects **drift** from the declared state, and either reports it or auto-corrects it — with drift events exported to Prometheus/Grafana.
+Someone SSHes into a router, changes a setting, and forgets to write it down.
+Now the device's real config quietly disagrees with what everyone *thinks* it
+is. That gap is config drift, and in real networks it's behind a lot of outages
+nobody can trace back.
 
-Config drift is the silent gap between what a device's config *should* be and what it *actually* is, usually from an out-of-band manual change nobody wrote down. In real networks that gap causes outages nobody can trace. NetDrift closes it with the same reconciliation-loop idea GitOps tools use for Kubernetes — one layer down, on network gear.
+NetDrift keeps the intended config for every device in Git (the source of truth)
+and runs a loop that compares each device against it — then either tells you
+what drifted or pushes the correct config back on its own.
 
-## How it works
+## What it does
 
-```
- Git repo (intended config — single source of truth)
- ├── inventory.yml        devices + connection info
- ├── intended/r1.cfg      desired config per device
- └── templates/*.j2       (optional) render configs from a data model
-          │  reads intended state
-          ▼
- reconciliation loop  ──SSH (Netmiko)──▶  virtual lab (containerlab / FRR)
-   1. pull running config                     r1   r2   r3
-   2. diff vs intended
-   3. report or auto-heal (+ backup/rollback)
-          │  emits drift metrics
-          ▼
- Prometheus + Grafana  (drift events, per-device health)
-```
+- SSHes into each device and pulls the running config
+- diffs it against the intended config in `intended/`
+- reports the drift, exiting non-zero so CI can gate on it
+- with `--auto-heal`, backs up the live config, pushes the intended one, and
+  rolls back if the push fails or doesn't take
+- exports drift metrics to Prometheus so you can watch it on Grafana
 
-## Quick start
+It's the same reconciliation-loop idea as Argo CD, one layer down on network gear.
+
+## Running it
 
 ```bash
 git clone https://github.com/Pk8796/netdrift.git
@@ -35,74 +38,60 @@ python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-Bring up the lab (needs Docker + [containerlab](https://containerlab.dev)):
+You need a lab of virtual devices to point it at. Either works — the code is the
+same, only `inventory.yml` changes:
+
+- **containerlab** (lighter, all free): `make lab-up` (needs Docker)
+- **GNS3** (real IOS/EOS images): steps in [docs/gns3-setup.md](docs/gns3-setup.md)
+
+Then:
 
 ```bash
-make lab-up
+netdrift check                            # just detect drift (read-only)
+netdrift reconcile --auto-heal --once     # detect + fix, single pass
+netdrift reconcile --auto-heal --metrics  # continuous loop, metrics on :9808
 ```
 
-> FRR containers need `sshd` and vtysh reachable on port 22. Once they're up and
-> the intended configs are applied, the SSH ports map to `127.0.0.1:2211-2213` as
-> declared in `inventory.yml`.
+For the metrics, point Prometheus at `observability/prometheus.yml` and import
+`observability/grafana-dashboard.json` into Grafana.
 
-### Rung 1 — detect drift (read-only)
+Optional — generate the intended configs from a small data model instead of
+hand-writing them:
 
 ```bash
-netdrift check
+netdrift render
 ```
 
-Exits non-zero if any device has drifted, so CI can use it directly. Change a
-setting on a router by hand, run it again, and it prints exactly what drifted.
+## The demo
 
-### Rung 2 — self-heal
-
-```bash
-netdrift reconcile --auto-heal --once      # single pass
-netdrift reconcile --auto-heal             # continuous loop (default 30s)
-```
-
-On drift it backs up the live config to `backups/`, pushes the intended config,
-verifies the device converged, and rolls back to the backup if the push fails or
-doesn't take. This is the headline demo: fat-finger a VLAN or interface
-description, watch the loop notice and revert it within seconds.
-
-### Rung 3 — observe
-
-```bash
-netdrift reconcile --auto-heal --metrics   # metrics on :9808/metrics
-```
-
-Point Prometheus at it (`observability/prometheus.yml`) and import
-`observability/grafana-dashboard.json`. Panels: drift rate, per-device drift
-count, reachability, time since last reconcile.
-
-## Intent-based config (optional)
-
-Instead of hand-writing each `intended/*.cfg`, generate them from a small data
-model:
-
-```bash
-netdrift render                 # devices.vars.yml + templates/frr.cfg.j2 -> intended/
-```
+Log into a router by hand and break something — change an interface description
+or an IP. The loop notices within seconds, backs up the live config, reverts it
+to what Git says, and the drift event spikes then clears on Grafana. That's the
+30-second clip worth recording.
 
 ## Layout
 
 ```
-netdrift/        control loop (inventory, device I/O, drift, reconcile, metrics, cli)
-intended/        desired config per device — the source of truth
-templates/       Jinja2 config templates
+netdrift/        the actual tool (inventory, ssh, diff, reconcile, metrics, cli)
+intended/        desired config per device — source of truth
+templates/       Jinja2 templates for generating configs
 lab/             containerlab topology
 observability/   prometheus config + grafana dashboard
-tests/           pytest (drift + inventory logic, no network needed)
+docs/            gns3 setup
+tests/           pytest for the diff + inventory logic (no network needed)
 ```
 
-## Notes / tradeoffs
+## Notes
 
-- Netmiko keeps the loop vendor-neutral and simple. For production-grade
-  replace-and-commit with native rollback, NAPALM's `load_replace_candidate` /
-  `commit` is the natural upgrade — the `DeviceSession` wrapper is the seam.
-- `netdrift check` is what CI runs on every PR to the intended-config repo, so
-  network changes get reviewed like code.
+- I used Netmiko because it's simple and vendor-neutral. The natural upgrade is
+  NAPALM, which gives you native replace-and-commit with rollback — the
+  `DeviceSession` class in `device.py` is the seam to swap it in.
+- The tests cover the pure logic (drift detection, inventory parsing) since
+  those don't need a live device. The device-facing bits you verify by running
+  against the lab.
+- CI (`.github/workflows/drift-check.yml`) runs lint + tests on every PR, and
+  `netdrift check` is meant to run on PRs to the intended-config repo so network
+  changes get reviewed like code.
 
 ## License
 
